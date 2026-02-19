@@ -1,6 +1,6 @@
-# FeatherFront Detection Engine
+# Feather Front Detection Engine
 
-The FeatherFront detection engine handles real-time bird-call analysis, live event logging, species-level summaries, best-clip tracking, and integrated weather settings for overlays.
+The Feather Front detection engine handles real-time bird-call analysis, live event logging, species-level summaries, best-clip tracking, and integrated weather settings for overlays.
 
 ## Platform status
 

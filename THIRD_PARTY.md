@@ -1,6 +1,6 @@
 # Third-Party Software and Services
 
-FeatherFront uses the following external software, libraries, and services.
+Feather Front uses the following external software, libraries, and services.
 Review each project for license details and attribution requirements.
 
 ## Core analysis and media
@@ -34,4 +34,4 @@ Review each project for license details and attribution requirements.
 ## Notes
 
 - This repository integrates these components but does not claim ownership of them.
-- Keep license texts/notices in sync with upstream requirements when distributing FeatherFront.
+- Keep license texts/notices in sync with upstream requirements when distributing Feather Front.

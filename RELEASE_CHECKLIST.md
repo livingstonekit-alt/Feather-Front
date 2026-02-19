@@ -1,6 +1,6 @@
 # Release Checklist (Packaging/Distribution)
 
-Use this checklist before publishing a FeatherFront release.
+Use this checklist before publishing a Feather Front release.
 
 ## 1. Security and secrets
 

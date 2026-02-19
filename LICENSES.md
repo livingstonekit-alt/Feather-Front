@@ -1,11 +1,11 @@
 # Licenses and Distribution Notes
 
 This project depends on third-party software and services.  
-Before packaging or redistributing FeatherFront, verify license obligations for each dependency.
+Before packaging or redistributing Feather Front, verify license obligations for each dependency.
 
 ## Project license
 
-- FeatherFront repository license: add your chosen license in `LICENSE` (if not already present).
+- Feather Front repository license: add your chosen license in `LICENSE` (if not already present).
 
 ## Third-party components
 

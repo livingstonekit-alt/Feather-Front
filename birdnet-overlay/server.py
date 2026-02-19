@@ -2445,7 +2445,7 @@ def make_handler(config):
 
     def _require_auth(self):
       self.send_response(401)
-      self.send_header("WWW-Authenticate", 'Basic realm="FeatherFront Settings"')
+      self.send_header("WWW-Authenticate", 'Basic realm="Feather Front Settings"')
       self.send_header("Cache-Control", "no-store, max-age=0")
       self.send_header("Content-Length", "0")
       self.end_headers()

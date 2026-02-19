@@ -46,7 +46,7 @@ prompt_yn() {
   done
 }
 
-echo "FeatherFront installer"
+echo "Feather Front installer"
 echo "Directory: $SCRIPT_DIR"
 
 PYTHON_BIN="$(choose_python || true)"
@@ -83,7 +83,7 @@ except Exception:
 print(value)
 PY
 )"
-read -r -p "HTTP port for FeatherFront [$CURRENT_PORT]: " PORT_INPUT || true
+read -r -p "HTTP port for Feather Front [$CURRENT_PORT]: " PORT_INPUT || true
 PORT_INPUT="${PORT_INPUT:-$CURRENT_PORT}"
 if [[ ! "$PORT_INPUT" =~ ^[0-9]+$ ]] || (( PORT_INPUT < 1 || PORT_INPUT > 65535 )); then
   echo "Invalid port: $PORT_INPUT"
@@ -265,7 +265,7 @@ fi
 
 echo
 echo "Install complete."
-echo "Start FeatherFront:"
+echo "Start Feather Front:"
 echo "  cd \"$SCRIPT_DIR\""
 echo "  \"$PYTHON_BIN\" server.py"
 echo

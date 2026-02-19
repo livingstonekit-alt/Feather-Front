@@ -1,6 +1,6 @@
-# FeatherFront
+# Feather Front
 
-FeatherFront is a real-time bird activity system for streams and monitoring setups.
+Feather Front is a real-time bird activity system for streams and monitoring setups.
 It combines live bird-call detection, rolling detection summaries, clip compilation, and weather context in a single interface.
 
 ## What it provides
@@ -18,9 +18,9 @@ It combines live bird-call detection, rolling detection summaries, clip compilat
 
 ## Visuals
 
-FeatherFront in action:
+Feather Front in action:
 
-![FeatherFront in action](screenshots/Screenshot%202026-02-19%2015-20-31.png)
+![Feather Front in action](screenshots/Screenshot%202026-02-19%2015-20-31.png)
 
 Detection overlay:
 
@@ -40,7 +40,7 @@ Activity and detections panels:
 
 ## Run it locally
 
-Full FeatherFront stack (recommended):
+Full Feather Front stack (recommended):
 
 ```bash
 cd birdnet-overlay
@@ -55,7 +55,7 @@ python3 server.py
 
 Then open:
 
-- `http://localhost:<PORT>/` (FeatherFront overlay)
+- `http://localhost:<PORT>/` (Feather Front overlay)
 - `http://localhost:<PORT>/weather/` (weather overlay)
 - `http://localhost:<PORT>/settings` (settings panel)
 
@@ -89,5 +89,5 @@ Recommended OBS Browser Source settings:
 
 - Update interval lives in `app.js`.
 - Visuals live in `styles.css`.
-- Weather location/unit can be controlled from FeatherFront settings (`http://localhost:<PORT>/settings`).
+- Weather location/unit can be controlled from Feather Front settings (`http://localhost:<PORT>/settings`).
 - The overlay reads weather settings from `/api/weather/settings` and falls back to `http://localhost:<PORT>/api/weather/settings`.
