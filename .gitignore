@@ -1,0 +1,31 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+
+# Local env / runtime
+birdnet-overlay/.venv/
+birdnet-overlay/server.log
+birdnet-overlay/settings.json
+birdnet-overlay/config.json
+birdnet-overlay/backup/config.json
+birdnet-overlay/backup/latest.json
+birdnet-overlay/backup/detections.jsonl
+birdnet-overlay/backup/events.jsonl
+birdnet-overlay/backup/clips.json
+
+# Generated BirdNET runtime artifacts
+birdnet-overlay/tmp/
+birdnet-overlay/data/detections.jsonl
+birdnet-overlay/data/events.jsonl
+birdnet-overlay/data/latest.json
+birdnet-overlay/data/clips/
+birdnet-overlay/data/clips.json
+birdnet-overlay/data/monitor.wav
+birdnet-overlay/data/icons/
+birdnet-overlay/data/icons.json
+birdnet-overlay/data/overlay.db
+birdnet-overlay/data/overlay.db-shm
+birdnet-overlay/data/overlay.db-wal

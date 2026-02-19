@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>FeatherFront Settings</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Grotesk:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    >
+    <link rel="stylesheet" href="/settings.css?v=19">
+  </head>
+  <body>
+    <main class="stage">
+      <section class="panel settings-panel">
+        <header class="panel-header">
+          <div>
+            <p class="eyebrow">FeatherFront Overlay</p>
+            <h1>Control Room</h1>
+          </div>
+          <div class="status" id="save-status">Idle</div>
+        </header>
+
+        <div class="panel-grid">
+          <details class="block block-collapsible" data-panel="quick-actions" open>
+            <summary class="block-summary">
+              <div class="block-header">
+                <h3>Quick Actions</h3>
+                <span class="block-subtitle">Core controls</span>
+              </div>
+              <div class="panel-controls">
+                <button class="drag-handle" type="button" aria-label="Drag to reorder" draggable="true">↕</button>
+                <span class="collapse-icon" aria-hidden="true"></span>
+              </div>
+            </summary>
+            <div class="block-body">
+              <div class="actions top-actions">
+                <button id="save-settings" type="button">Save settings</button>
+                <button id="restart-capture" type="button">Restart capture</button>
+                <button id="logout-settings" type="button">Log out</button>
+              </div>
+            </div>
+          </details>
+
+          <details class="block block-collapsible" data-panel="urls" open>
+            <summary class="block-summary">
+              <div class="block-header">
+                <h3>Overlay URLs</h3>
+                <span class="block-subtitle">Copy links and set port</span>
+              </div>
+              <div class="panel-controls">
+                <button class="drag-handle" type="button" aria-label="Drag to reorder" draggable="true">↕</button>
+                <span class="collapse-icon" aria-hidden="true"></span>
+              </div>
+            </summary>
+            <div class="block-body">
+              <div class="field">
+                <label for="http-port">
+                  HTTP port
+                  <span class="help" data-tip="Port used for FeatherFront server URLs. Changing this requires restarting the server." tabindex="0">i</span>
+                </label>
+                <input id="http-port" type="number" min="1" max="65535" step="1" placeholder="8002" title="Port used by the FeatherFront server.">
+              </div>
+              <div class="field">
+                <label for="overlay-url">FeatherFront overlay URL</label>
+                <div class="device-row">
+                  <input id="overlay-url" type="text" readonly>
+                  <button id="copy-overlay-url" type="button">Copy</button>
+                </div>
+              </div>
+              <div class="field">
+                <label for="settings-url">Settings URL</label>
+                <div class="device-row">
+                  <input id="settings-url" type="text" readonly>
+                  <button id="copy-settings-url" type="button">Copy</button>
+                </div>
+              </div>
+              <div class="field">
+                <label for="weather-overlay-url">Weather overlay URL</label>
+                <div class="device-row">
+                  <input id="weather-overlay-url" type="text" readonly>
+                  <button id="copy-weather-overlay-url" type="button">Copy</button>
+                </div>
+              </div>
+              <div class="field">
+                <button id="restart-server" type="button">Restart server now</button>
+              </div>
+            </div>
+          </details>
+
+          <details class="block block-collapsible" data-panel="input" open>
+            <summary class="block-summary">
+              <div class="block-header">
+                <h3>Input</h3>
+                <span class="block-subtitle">Choose the audio source</span>
+              </div>
+              <div class="panel-controls">
+                <button class="drag-handle" type="button" aria-label="Drag to reorder" draggable="true">↕</button>
+                <span class="collapse-icon" aria-hidden="true"></span>
+              </div>
+            </summary>
+            <div class="block-body">
+              <div class="field">
+                <label>
+                  Input source
+                  <span class="help" data-tip="Choose the audio source for FeatherFront. Stream uses RTMP/RTSP, device uses a local mic." tabindex="0">i</span>
+                </label>
+                <div class="choices">
+                  <label class="choice">
+                    <input type="radio" name="input_mode" value="stream" checked>
+                    RTMP / RTSP stream
+                  </label>
+                  <label class="choice">
+                    <input type="radio" name="input_mode" value="avfoundation">
+                    Local audio device
+                  </label>
+                </div>
+              </div>
+
+              <div class="field" id="stream-field">
+                <label for="stream-url">
+                  Stream URL
+                  <span class="help" data-tip="Full RTMP/RTSP URL. Example: rtsp://user:pass@camera:554/stream" tabindex="0">i</span>
+                </label>
+                <input id="stream-url" type="text" placeholder="rtsp://user:pass@camera:554/stream" title="Example: rtsp://user:pass@camera:554/stream">
+              </div>
+
+              <div class="field" id="device-field">
+                <label for="device-select">
+                  Audio device
+                  <span class="help" data-tip="Pick a local input device by index. Use Refresh to load device list." tabindex="0">i</span>
+                </label>
+                <div class="device-row">
+                  <select id="device-select" title="Select a device index from the list."></select>
+                  <button type="button" id="refresh-devices">Refresh</button>
+                </div>
+                <div class="device-manual">
+                  <input id="device-manual" type="text" placeholder="Or enter device index" title="Enter a numeric device index (from the list).">
+                  <span id="device-warning" class="hint"></span>
+                </div>
+              </div>
+            </div>
+          </details>
+
+          <details class="block block-collapsible" data-panel="detection" open>
+            <summary class="block-summary">
+              <div class="block-header">
+                <h3>Detection</h3>
+                <span class="block-subtitle">Tune what gets reported</span>
+              </div>
+              <div class="panel-controls">
+                <button class="drag-handle" type="button" aria-label="Drag to reorder" draggable="true">↕</button>
+                <span class="collapse-icon" aria-hidden="true"></span>
+              </div>
+            </summary>
+            <div class="block-body">
+              <div class="field">
+                <label for="min-confidence">
+                  Detection threshold
+                  <span class="help" data-tip="Minimum confidence to report a call. 0.40 = 40%." tabindex="0">i</span>
+                </label>
+                <div class="range-row">
+                  <input id="min-confidence" type="range" min="0" max="1" step="0.01" title="Minimum confidence (0.40 = 40%).">
+                  <span id="min-confidence-value">0.40</span>
+                </div>
+              </div>
+
+              <div class="field">
+                <label for="segment-seconds">
+                  Segment length (seconds)
+                  <span class="help" data-tip="Audio chunk size sent to FeatherFront analysis. 3 seconds is typical." tabindex="0">i</span>
+                </label>
+                <input id="segment-seconds" type="number" min="0.1" step="0.1" title="Number of seconds per analysis chunk.">
+              </div>
+
+              <div class="field">
+                <label for="silence-threshold">
+                  Silence gate (dBFS)
+                  <span class="help" data-tip="Segments below this level are skipped to avoid empty analysis." tabindex="0">i</span>
+                </label>
+                <input id="silence-threshold" type="number" min="-120" max="0" step="0.5" placeholder="-45" title="Segments below this level are skipped.">
+                <p class="hint">Lower values are more sensitive (e.g. -50 dBFS).</p>
+              </div>
+
+              <div class="field">
+                <label for="silence-min-seconds">
+                  Min active (seconds)
+                  <span class="help" data-tip="Audio must exceed the gate for at least this long to analyze the segment." tabindex="0">i</span>
+                </label>
+                <input id="silence-min-seconds" type="number" min="0" step="0.05" placeholder="0.2" title="Audio must exceed the gate for at least this long.">
+                <p class="hint">Use 0 to disable the gate entirely.</p>
+              </div>
+
+            </div>
+          </details>
+
+          <details class="block block-collapsible" data-panel="overlay" open>
+            <summary class="block-summary">
+              <div class="block-header">
+                <h3>Overlay</h3>
+                <span class="block-subtitle">Display timing</span>
+              </div>
+              <div class="panel-controls">
+                <button class="drag-handle" type="button" aria-label="Drag to reorder" draggable="true">↕</button>
+                <span class="collapse-icon" aria-hidden="true"></span>
+              </div>
+            </summary>
+            <div class="block-body">
+              <div class="field">
+                <label for="overlay-hold">
+                  Hold open (seconds)
+                  <span class="help" data-tip="How long the overlay stays expanded after a detection." tabindex="0">i</span>
+                </label>
+                <input id="overlay-hold" type="number" min="1" step="1" placeholder="60" title="Seconds to keep the overlay open after detection.">
+                <p class="hint">Applies on the next detection.</p>
+              </div>
+              <div class="field toggle-field">
+                <label class="toggle">
+                  <input id="overlay-sticky" type="checkbox">
+                  <span class="toggle-ui"></span>
+                  Keep overlay open until next detection
+                </label>
+              </div>
+            </div>
+          </details>
+
+          <details class="block block-collapsible" data-panel="location" open>
+            <summary class="block-summary">
+              <div class="block-header">
+                <h3>Location</h3>
+                <span class="block-subtitle">Seasonal filtering</span>
+              </div>
+              <div class="panel-controls">
+                <button class="drag-handle" type="button" aria-label="Drag to reorder" draggable="true">↕</button>
+                <span class="collapse-icon" aria-hidden="true"></span>
+              </div>
+            </summary>
+            <div class="block-body">
+              <div class="field">
+                <label for="coords">
+                  Coordinates
+                  <span class="help" data-tip="Format: 36.1881° N, 84.1215° W. Used for species filtering." tabindex="0">i</span>
+                </label>
+                <input id="coords" type="text" placeholder="36.1881° N, 84.1215° W" title="Format: 36.1881° N, 84.1215° W">
+              </div>
+              <div class="field">
+                <label for="week">
+                  Week of year
+                  <span class="help" data-tip="Set -1 for year-round. 1-48 enables seasonal filtering." tabindex="0">i</span>
+                </label>
+                <label class="choice">
+                  <input id="auto-week" type="checkbox">
+                  Auto week (use current date)
+                </label>
+                <input id="week" type="number" min="-1" max="48" step="1" placeholder="-1" title="Use -1 for year-round filtering.">
+                <p class="hint" id="week-hint">Set week to -1 for year-round species filtering.</p>
+              </div>
+            </div>
+          </details>
+
+          <details class="block block-collapsible" data-panel="weather" open>
+            <summary class="block-summary">
+              <div class="block-header">
+                <h3>Weather</h3>
+                <span class="block-subtitle">Overlay weather settings</span>
+              </div>
+              <div class="panel-controls">
+                <button class="drag-handle" type="button" aria-label="Drag to reorder" draggable="true">↕</button>
+                <span class="collapse-icon" aria-hidden="true"></span>
+              </div>
+            </summary>
+            <div class="block-body">
+              <div class="field">
+                <label for="weather-location">
+                  Weather location
+                  <span class="help" data-tip="ZIP code, city, or location query used by Open-Meteo geocoding." tabindex="0">i</span>
+                </label>
+                <input id="weather-location" type="text" placeholder="YOUR_ZIP" title="ZIP, city, or place name.">
+              </div>
+              <div class="field">
+                <label for="weather-unit">
+                  Temperature unit
+                  <span class="help" data-tip="Choose Fahrenheit or Celsius for the weather overlay." tabindex="0">i</span>
+                </label>
+                <select id="weather-unit" title="Select temperature unit for the weather overlay.">
+                  <option value="fahrenheit">Fahrenheit (F)</option>
+                  <option value="celsius">Celsius (C)</option>
+                </select>
+              </div>
+            </div>
+          </details>
+        </div>
+      </section>
+
+      <div class="right-stack">
+        <section class="panel activity-panel">
+        <header class="panel-header">
+          <div>
+            <p class="eyebrow">Activity</p>
+            <h2>Live feed</h2>
+          </div>
+          <div class="activity-actions">
+            <div class="count" id="queue-count">Queue 0</div>
+            <div class="activity-filters">
+              <button class="activity-filter" type="button" data-filter="all">All</button>
+              <button class="activity-filter" type="button" data-filter="detection">Detections</button>
+              <button class="activity-filter" type="button" data-filter="analysis">Analysis</button>
+              <button class="activity-filter" type="button" data-filter="error">Errors</button>
+              <button class="activity-filter" type="button" data-filter="server">Server</button>
+            </div>
+          </div>
+        </header>
+          <div class="activity-curve-card">
+            <div class="activity-curve-header">
+              <span>10-day average calls</span>
+            </div>
+            <canvas id="activity-curve" class="activity-curve" width="600" height="140"></canvas>
+          </div>
+          <div class="activity-table">
+            <div class="activity-head">
+              <span>Time</span>
+              <span>Type</span>
+              <span>Event</span>
+            </div>
+            <div id="activity-body" class="activity-body"></div>
+          </div>
+        </section>
+
+      <section class="panel log-panel">
+        <header class="panel-header">
+          <div>
+            <p class="eyebrow">Detections</p>
+            <h2>All calls</h2>
+          </div>
+          <div class="log-actions">
+            <div class="count" id="species-count">0 species</div>
+            <button id="export-log" type="button">Export CSV</button>
+            <button id="refresh-log" type="button">Refresh log</button>
+          </div>
+        </header>
+          <div class="log-table">
+            <div class="log-head">
+              <span class="log-icon-head"></span>
+              <div class="log-detection-head">
+                <button class="sort-header" type="button" data-sort="time">Time</button>
+                <button class="sort-header" type="button" data-sort="species">Species</button>
+              </div>
+              <div class="log-stats-head">
+                <button class="sort-header sort-center" type="button" data-sort="count">X Heard</button>
+                <span>Confidence</span>
+                <span>30-Day Trend</span>
+              </div>
+              <span></span>
+            </div>
+            <div id="log-body" class="log-body"></div>
+          </div>
+        </section>
+      </div>
+    </main>
+    <script src="/settings.js?v=36"></script>
+  </body>
+</html>

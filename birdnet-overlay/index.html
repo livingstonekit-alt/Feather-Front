@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>BirdNET Overlay</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Grotesk:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    >
+    <link rel="stylesheet" href="styles.css?v=12">
+  </head>
+  <body>
+    <main class="stage">
+      <section id="overlay" class="banner" aria-live="polite">
+        <div class="slide-track">
+          <div class="slide is-visible" data-index="0">
+            <div class="slide-left">
+              <div class="species-icon is-hidden">
+                <img class="species-icon-img" alt="">
+              </div>
+              <div class="species-text">
+                <h2 class="slide-species-text">Listening</h2>
+                <p class="slide-latin-text">--</p>
+              </div>
+            </div>
+            <div class="slide-right">
+              <div class="slide-pills">
+                <div class="pill activity-pill">
+                  <div class="activity-spark">
+                    <canvas class="activity-canvas" width="160" height="44"></canvas>
+                    <span class="activity-marker"></span>
+                  </div>
+                </div>
+                <span class="pill meta-pill time-pill">Since last heard --</span>
+                <div class="species-card pill">
+                  <span class="species-card-title">Rank</span>
+                  <span class="species-card-value">--</span>
+                </div>
+                <span class="pill heard-pill">0x heard</span>
+              </div>
+              <div class="confidence-panel">
+                <div class="confidence-meta">
+                  <span class="confidence-label">Audio confidence</span>
+                  <span class="confidence-sub">Buffered feed</span>
+                </div>
+                <div class="confidence-number">
+                  <span class="confidence-value">--</span>
+                  <span class="unit">%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slide" data-index="1">
+            <div class="slide-left">
+              <div class="species-icon is-hidden">
+                <img class="species-icon-img" alt="">
+              </div>
+              <div class="species-text">
+                <h2 class="slide-species-text">Listening</h2>
+                <p class="slide-latin-text">--</p>
+              </div>
+            </div>
+            <div class="slide-right">
+              <div class="slide-pills">
+                <div class="pill activity-pill">
+                  <div class="activity-spark">
+                    <canvas class="activity-canvas" width="160" height="44"></canvas>
+                    <span class="activity-marker"></span>
+                  </div>
+                </div>
+                <span class="pill meta-pill time-pill">Since last heard --</span>
+                <div class="species-card pill">
+                  <span class="species-card-title">Rank</span>
+                  <span class="species-card-value">--</span>
+                </div>
+                <span class="pill heard-pill">0x heard</span>
+              </div>
+              <div class="confidence-panel">
+                <div class="confidence-meta">
+                  <span class="confidence-label">Audio confidence</span>
+                  <span class="confidence-sub">Buffered feed</span>
+                </div>
+                <div class="confidence-number">
+                  <span class="confidence-value">--</span>
+                  <span class="unit">%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+    <script src="app.js?v=18"></script>
+  </body>
+</html>

@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>BirdNET Overlay</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Grotesk:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    >
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="stage">
+      <section id="overlay" class="card docked" aria-live="polite">
+        <div class="dock">
+          <div class="dock-main">
+            <div class="dock-grid">
+              <p class="dock-label dock-label-row">
+                Latest call
+                <span id="dock-count" class="dock-count">(0 species)</span>
+              </p>
+              <div class="dock-time-row">
+                <span class="dock-time-label">Last heard</span>
+                <span id="dock-time">--</span>
+              </div>
+              <div class="dock-left-col">
+                <p class="dock-species">
+                  <span class="dock-name">
+                    <span id="dock-species-text">Listening</span>
+                    <span class="ellipsis" aria-hidden="true"></span>
+                    <span class="dock-latin-pill">
+                      <span id="dock-latin" class="dock-latin">--</span>
+                    </span>
+                  </span>
+                </p>
+              </div>
+              <div class="dock-times-row">
+                <span id="dock-times" class="dock-times">0x heard</span>
+                <span id="dock-confidence" class="dock-confidence">--</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="header">
+          <div>
+            <p class="eyebrow">Live BirdNET</p>
+            <h1 id="species">
+              <span id="species-text">Listening</span>
+              <span class="ellipsis" aria-hidden="true"></span>
+            </h1>
+            <span id="latin" class="latin">--</span>
+          </div>
+          <div class="timestamp">
+            <span class="label">Last heard</span>
+            <span id="updated">--</span>
+          </div>
+        </div>
+
+        <div class="bottom-row">
+          <div class="hero">
+            <div class="summary">
+              <span id="status">Detection Confidence</span>
+            </div>
+            <div class="confidence">
+              <span id="confidence">--</span>
+              <span class="unit">%</span>
+            </div>
+          </div>
+          <div class="stats">
+            <div class="stat">
+              <span class="stat-label">Clip</span>
+              <span id="clip" class="stat-value">--s</span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Times Heard</span>
+              <span id="times-heard" class="stat-value">0</span>
+            </div>
+          </div>
+        </div>
+
+      </section>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>

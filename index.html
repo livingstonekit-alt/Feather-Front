@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>FeatherFront</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Grotesk:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    >
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="stage">
+      <section id="overlay" class="card" aria-live="polite">
+        <div class="header">
+          <div class="place">
+            <h1 id="location">FeatherFront Weather</h1>
+            <span id="location-tag" class="zip">Loading...</span>
+          </div>
+        </div>
+
+        <div class="weather">
+          <div class="hero">
+            <div class="temp">
+              <span id="temp">--</span>
+              <span id="temp-unit" class="unit">&deg;F</span>
+            </div>
+            <div class="condition">
+              <span id="condition">Fetching forecast...</span>
+              <span id="feels">Feels like --</span>
+            </div>
+          </div>
+
+        <div class="stats">
+          <div class="stat">
+            <span class="stat-label">Precip</span>
+            <span id="precip" class="stat-value">-- in</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Humidity</span>
+            <span id="humidity" class="stat-value">--%</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Wind</span>
+            <span id="wind" class="stat-value">-- mph</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Next 1h</span>
+            <span id="next-hour" class="stat-value">--</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Tomorrow</span>
+            <span id="tomorrow" class="stat-value">--</span>
+          </div>
+        </div>
+        </div>
+
+        <div class="timestamp">
+          <span class="sun">
+            Sunrise <span id="sunrise">--</span> · Sunset <span id="sunset">--</span>
+          </span>
+          <span id="clock">--</span>
+          <span id="date">--</span>
+        </div>
+
+      </section>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>
