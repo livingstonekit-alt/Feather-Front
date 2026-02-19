@@ -2,6 +2,11 @@
 
 The FeatherFront detection engine handles real-time bird-call analysis, live event logging, species-level summaries, best-clip tracking, and integrated weather settings for overlays.
 
+## Platform status
+
+- Current end-to-end testing has been performed on a Mac mini (macOS).
+- Other platforms may work, but have not been fully validated yet.
+
 ## Requirements
 
 - `ffmpeg`

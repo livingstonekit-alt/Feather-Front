@@ -11,6 +11,11 @@ It combines live bird-call detection, rolling detection summaries, clip compilat
 - Weather overlay and settings tied to the same runtime system
 - Unified settings panel for audio, detection, location, weather, and admin controls
 
+## Platform status
+
+- Current end-to-end testing has been performed on a Mac mini (macOS).
+- Other platforms may work, but have not been fully validated in this repository yet.
+
 ## Visuals
 
 FeatherFront in action:
