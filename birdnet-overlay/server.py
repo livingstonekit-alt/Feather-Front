@@ -2410,7 +2410,11 @@ def make_handler(config):
       return {"enabled": True, "user": user, "password_hash": password_hash}
 
     def _requires_auth(self, path):
-      if path.startswith("/api/status") or path.startswith("/api/weather/settings"):
+      if (
+        path.startswith("/api/status")
+        or path.startswith("/api/weather/settings")
+        or path.startswith("/api/log/activity")
+      ):
         return False
       if path.startswith("/weather/") or path in {"/weather", "/weather/"}:
         return False
