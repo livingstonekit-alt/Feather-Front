@@ -62,6 +62,7 @@ const PANEL_ORDER_KEY = "birdnet_panel_order";
 let audioPlayer = null;
 let currentClipUrl = null;
 let activityFilterSet = new Set(["all"]);
+let showMissingIconsOnly = false;
 
 function normalizePort(value, fallback = 8002) {
   if (value === null || value === undefined) {
@@ -285,6 +286,16 @@ function updateSortIndicators() {
   });
 }
 
+function updateMissingIconFilterButton() {
+  if (!elements.speciesCount) {
+    return;
+  }
+  elements.speciesCount.dataset.active = showMissingIconsOnly ? "true" : "false";
+  elements.speciesCount.title = showMissingIconsOnly
+    ? "Showing missing icons only. Click to show all birds."
+    : "Click to show birds missing icons only.";
+}
+
 function buildSpeciesCounts(entries) {
   const counts = new Map();
   entries.forEach((entry) => {
@@ -491,18 +502,25 @@ async function loadSettings() {
 
 function renderLog(entries) {
   elements.logBody.innerHTML = "";
-  if (!entries || entries.length === 0) {
+  const sourceEntries = Array.isArray(entries) ? entries : [];
+  const visibleEntries = showMissingIconsOnly
+    ? sourceEntries.filter((entry) => !entry.icon_url)
+    : sourceEntries;
+  if (visibleEntries.length === 0) {
     const empty = document.createElement("div");
     empty.className = "log-row";
-    empty.innerHTML = "<span>--</span><span>No detections yet</span><span>--</span><span></span>";
+    empty.innerHTML = showMissingIconsOnly
+      ? "<span>--</span><span>No birds missing icons</span><span>--</span><span></span>"
+      : "<span>--</span><span>No detections yet</span><span>--</span><span></span>";
     elements.logBody.appendChild(empty);
     if (elements.speciesCount) {
-      elements.speciesCount.textContent = "0 species";
+      elements.speciesCount.textContent = showMissingIconsOnly
+        ? "0 species (no icon)"
+        : "0 species";
     }
     return;
   }
-  const counts = buildSpeciesCounts(entries);
-  const summary = entries.map((entry) => ({
+  const summary = visibleEntries.map((entry) => ({
     species: entry.species || "Unknown",
     entry,
     time: numericTime(entry.timestamp),
@@ -510,7 +528,9 @@ function renderLog(entries) {
   }));
   const sorted = sortSummary(summary);
   if (elements.speciesCount) {
-    elements.speciesCount.textContent = `${entries.length} species`;
+    elements.speciesCount.textContent = showMissingIconsOnly
+      ? `${visibleEntries.length} species (no icon)`
+      : `${visibleEntries.length} species`;
   }
 
   sorted.forEach((item) => {
@@ -1358,6 +1378,13 @@ function bindEvents() {
   elements.saveSettings.addEventListener("click", saveSettings);
   elements.refreshLog.addEventListener("click", loadLog);
   elements.exportLog.addEventListener("click", exportDetectionsCsv);
+  if (elements.speciesCount) {
+    elements.speciesCount.addEventListener("click", () => {
+      showMissingIconsOnly = !showMissingIconsOnly;
+      updateMissingIconFilterButton();
+      renderLog(logEntries);
+    });
+  }
   elements.logSortButtons.forEach((button) => {
     button.addEventListener("click", () => {
       const mode = button.dataset.sort || "time";
@@ -1482,6 +1509,7 @@ bindEvents();
 renderOverlayUrls();
 loadInputs().then(loadSettings);
 updateSortIndicators();
+updateMissingIconFilterButton();
 updateActivityFilterButtons();
 loadLog();
 loadActivity();

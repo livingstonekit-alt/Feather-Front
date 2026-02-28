@@ -116,6 +116,11 @@ body {
   background: rgba(0, 0, 0, 0.3);
 }
 
+button.count {
+  font-family: inherit;
+  cursor: pointer;
+}
+
 .panel-grid {
   position: relative;
   z-index: 1;
@@ -491,6 +496,11 @@ body {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+#species-count[data-active="true"] {
+  border-color: rgba(76, 201, 240, 0.7);
+  background: rgba(76, 201, 240, 0.18);
 }
 
 .log-body {
