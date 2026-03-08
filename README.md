@@ -91,3 +91,4 @@ Recommended OBS Browser Source settings:
 - Visuals live in `styles.css`.
 - Weather location/unit can be controlled from Feather Front settings (`http://localhost:<PORT>/settings`).
 - The overlay reads weather settings from `/api/weather/settings` and falls back to `http://localhost:<PORT>/api/weather/settings`.
+- Weather provider order is Open-Meteo primary, then NOAA weather.gov fallback if Open-Meteo fails.

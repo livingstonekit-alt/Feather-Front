@@ -22,6 +22,14 @@ Before packaging or redistributing Feather Front, verify license obligations for
   - Geocoding API: https://open-meteo.com/en/docs/geocoding-api
   - Action: verify attribution/usage terms for your deployment scale.
 
+- NOAA weather.gov API
+  - Docs: https://www.weather.gov/documentation/services-web-api
+  - Action: confirm usage requirements and caching guidance for production use.
+
+- Sunrise-Sunset API
+  - API: https://sunrise-sunset.org/api
+  - Action: verify service terms for your deployment/use case.
+
 - Google Fonts
   - Bebas Neue: https://fonts.google.com/specimen/Bebas+Neue
   - Space Grotesk: https://fonts.google.com/specimen/Space+Grotesk

@@ -1,4 +1,4 @@
-const REFRESH_MINUTES = 1;
+const REFRESH_MINUTES = 5;
 const SETTINGS_REFRESH_MS = 60 * 1000;
 const DEFAULT_WEATHER_LOCATION = "YOUR_ZIP";
 const DEFAULT_WEATHER_UNIT = "fahrenheit";
@@ -209,6 +209,144 @@ function formatForecastLabel(condition, precipitation) {
   return condition + chance;
 }
 
+function toLocalDateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function parseNumericAverage(text) {
+  const matches = String(text || "").match(/-?\d+(?:\.\d+)?/g);
+  if (!matches || matches.length === 0) {
+    return null;
+  }
+  const values = matches.map((value) => Number(value)).filter((value) => Number.isFinite(value));
+  if (values.length === 0) {
+    return null;
+  }
+  const total = values.reduce((sum, value) => sum + value, 0);
+  return total / values.length;
+}
+
+function parseNwsWindMph(speedText) {
+  const value = parseNumericAverage(speedText);
+  if (!Number.isFinite(value)) {
+    return null;
+  }
+  const lower = String(speedText || "").toLowerCase();
+  if (lower.includes("km/h") || lower.includes("kph")) {
+    return value / 1.609344;
+  }
+  if (lower.includes("m/s")) {
+    return value * 2.236936;
+  }
+  return value;
+}
+
+function convertTemperatureValue(value, sourceUnit) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return null;
+  }
+  const unit = String(sourceUnit || "F").toUpperCase();
+  let fahrenheit = numeric;
+  if (unit === "C") {
+    fahrenheit = (numeric * 9) / 5 + 32;
+  }
+  if (weatherConfig.unit === "celsius") {
+    return Math.round(((fahrenheit - 32) * 5) / 9);
+  }
+  return Math.round(fahrenheit);
+}
+
+function convertWindForDisplay(mphValue) {
+  if (!Number.isFinite(mphValue)) {
+    return null;
+  }
+  if (weatherConfig.unit === "celsius") {
+    return Math.round(mphValue * 1.609344);
+  }
+  return Math.round(mphValue);
+}
+
+function formatNwsWind(speedText, directionText) {
+  const speedMph = parseNwsWindMph(speedText);
+  const speed = convertWindForDisplay(speedMph);
+  const direction = String(directionText || "").trim() || "--";
+  if (!Number.isFinite(speed)) {
+    return `-- ${getWindDisplayUnit()} ${direction}`;
+  }
+  return `${speed} ${getWindDisplayUnit()} ${direction}`;
+}
+
+async function extractResponseError(response, fallbackMessage) {
+  if (!response) {
+    return fallbackMessage;
+  }
+  try {
+    const data = await response.json();
+    const reason = data && (data.reason || data.error || data.message);
+    if (reason) {
+      return String(reason);
+    }
+  } catch (error) {
+    return fallbackMessage;
+  }
+  return fallbackMessage;
+}
+
+function formatPrecipChance(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return "--";
+  }
+  return `${Math.round(numeric)}% chance`;
+}
+
+function getTomorrowForecast(periods) {
+  if (!Array.isArray(periods) || periods.length === 0) {
+    return null;
+  }
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowKey = toLocalDateKey(tomorrow);
+  const tomorrowPeriods = periods.filter((period) => {
+    const start = String(period.startTime || "");
+    return start.slice(0, 10) === tomorrowKey;
+  });
+  if (tomorrowPeriods.length === 0) {
+    return null;
+  }
+
+  const daytime = tomorrowPeriods.find((period) => period.isDaytime) || tomorrowPeriods[0];
+  const nighttime = tomorrowPeriods.find((period) => !period.isDaytime) || null;
+  const convertedTemps = tomorrowPeriods
+    .map((period) => convertTemperatureValue(period.temperature, period.temperatureUnit))
+    .filter((value) => Number.isFinite(value));
+
+  const high = convertTemperatureValue(daytime.temperature, daytime.temperatureUnit);
+  const low = nighttime
+    ? convertTemperatureValue(nighttime.temperature, nighttime.temperatureUnit)
+    : null;
+
+  const maxTemp = Number.isFinite(high)
+    ? high
+    : (convertedTemps.length > 0 ? Math.max(...convertedTemps) : null);
+  const minTemp = Number.isFinite(low)
+    ? low
+    : (convertedTemps.length > 0 ? Math.min(...convertedTemps) : null);
+
+  if (!Number.isFinite(maxTemp) || !Number.isFinite(minTemp)) {
+    return null;
+  }
+  return {
+    maxTemp,
+    minTemp,
+    condition: daytime.shortForecast || tomorrowPeriods[0].shortForecast || "Unknown",
+  };
+}
+
 async function getCoordinates() {
   if (cachedCoords) {
     return cachedCoords;
@@ -243,93 +381,195 @@ async function getCoordinates() {
   return cachedCoords;
 }
 
+async function updateWeatherFromOpenMeteo(coords) {
+  const weatherUrl = new URL("https://api.open-meteo.com/v1/forecast");
+  weatherUrl.searchParams.set("latitude", coords.latitude);
+  weatherUrl.searchParams.set("longitude", coords.longitude);
+  weatherUrl.searchParams.set(
+    "current",
+    "temperature_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,relative_humidity_2m"
+  );
+  weatherUrl.searchParams.set(
+    "hourly",
+    "temperature_2m,weather_code,precipitation_probability"
+  );
+  weatherUrl.searchParams.set(
+    "daily",
+    "temperature_2m_max,temperature_2m_min,weather_code,sunrise,sunset,precipitation_sum"
+  );
+  weatherUrl.searchParams.set("temperature_unit", weatherConfig.unit);
+  weatherUrl.searchParams.set("wind_speed_unit", getWindApiUnit());
+  weatherUrl.searchParams.set("timezone", "auto");
+
+  const response = await fetch(weatherUrl);
+  if (!response.ok) {
+    const reason = await extractResponseError(response, "Unable to reach weather service.");
+    throw new Error(reason);
+  }
+
+  const data = await response.json();
+  const current = data.current;
+  if (!current) {
+    throw new Error("Weather data unavailable.");
+  }
+
+  const temp = Math.round(current.temperature_2m);
+  const feels = Math.round(current.apparent_temperature);
+  const humidity = Math.round(current.relative_humidity_2m);
+  const wind = Math.round(current.wind_speed_10m);
+  const windDir = windDirection(current.wind_direction_10m ?? 0);
+  const condition = WEATHER_CODES[current.weather_code] || "Weather code " + current.weather_code;
+
+  const tempSymbol = getTemperatureSymbol();
+  const windUnit = getWindDisplayUnit();
+
+  elements.temp.textContent = temp;
+  elements.condition.textContent = condition;
+  elements.feels.textContent = "Feels like " + feels + " " + tempSymbol;
+  elements.humidity.textContent = humidity + "%";
+  elements.wind.textContent = wind + " " + windUnit + " " + windDir;
+
+  const hourly = data.hourly;
+  if (hourly && Array.isArray(hourly.time)) {
+    const now = new Date();
+    const nextIndex = hourly.time.findIndex((time) => new Date(time) >= now);
+    const baseIndex = nextIndex === -1 ? hourly.time.length - 1 : nextIndex;
+    const nextHourCode = hourly.weather_code?.[baseIndex];
+    const nextHourPrecip = hourly.precipitation_probability?.[baseIndex];
+    const nextHourCondition = WEATHER_CODES[nextHourCode] || "Unknown";
+    elements.nextHour.textContent = formatForecastLabel(nextHourCondition, nextHourPrecip);
+  }
+
+  const daily = data.daily;
+  if (daily && Array.isArray(daily.time) && daily.time.length > 1) {
+    const todayIndex = 0;
+    const precip = daily.precipitation_sum?.[todayIndex];
+    if (precip !== undefined && precip !== null) {
+      if (weatherConfig.unit === "celsius") {
+        elements.precip.textContent = precip.toFixed(1) + " mm";
+      } else {
+        const inches = mmToInches(precip);
+        elements.precip.textContent = inches.toFixed(2) + " in";
+      }
+    }
+    const sunrise = daily.sunrise?.[todayIndex];
+    const sunset = daily.sunset?.[todayIndex];
+    if (sunrise && sunset) {
+      elements.sunrise.textContent = formatShortTime(new Date(sunrise));
+      elements.sunset.textContent = formatShortTime(new Date(sunset));
+    }
+
+    const tomorrowIndex = 1;
+    const maxTemp = Math.round(daily.temperature_2m_max?.[tomorrowIndex]);
+    const minTemp = Math.round(daily.temperature_2m_min?.[tomorrowIndex]);
+    const code = daily.weather_code?.[tomorrowIndex];
+    const tomorrowCondition = WEATHER_CODES[code] || "Unknown";
+    elements.tomorrow.textContent = maxTemp + "/" + minTemp + " " + tomorrowCondition;
+  }
+}
+
+async function updateSunriseSunset(coords) {
+  const sunUrl = new URL("https://api.sunrise-sunset.org/json");
+  sunUrl.searchParams.set("lat", coords.latitude);
+  sunUrl.searchParams.set("lng", coords.longitude);
+  sunUrl.searchParams.set("formatted", "0");
+  try {
+    const response = await fetch(sunUrl);
+    if (!response.ok) {
+      throw new Error("Unable to reach sunrise service.");
+    }
+    const data = await response.json();
+    const sunrise = data && data.results ? data.results.sunrise : null;
+    const sunset = data && data.results ? data.results.sunset : null;
+    if (sunrise && sunset) {
+      elements.sunrise.textContent = formatShortTime(new Date(sunrise));
+      elements.sunset.textContent = formatShortTime(new Date(sunset));
+      return;
+    }
+  } catch (error) {
+    // Keep UI functional even when sunrise service fails.
+  }
+  elements.sunrise.textContent = "--";
+  elements.sunset.textContent = "--";
+}
+
+async function updateWeatherFromNws(coords) {
+  const latitude = Number(coords.latitude);
+  const longitude = Number(coords.longitude);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    throw new Error("Invalid coordinates for NOAA weather.");
+  }
+
+  const pointsUrl = `https://api.weather.gov/points/${latitude.toFixed(4)},${longitude.toFixed(4)}`;
+  const pointsResponse = await fetch(pointsUrl);
+  if (!pointsResponse.ok) {
+    throw new Error("NOAA point lookup unavailable.");
+  }
+  const pointsData = await pointsResponse.json();
+  const forecastHourlyUrl = pointsData?.properties?.forecastHourly;
+  const forecastUrl = pointsData?.properties?.forecast;
+  if (!forecastHourlyUrl || !forecastUrl) {
+    throw new Error("NOAA forecast endpoints unavailable.");
+  }
+
+  const [hourlyResponse, forecastResponse] = await Promise.all([
+    fetch(forecastHourlyUrl),
+    fetch(forecastUrl),
+  ]);
+  if (!hourlyResponse.ok || !forecastResponse.ok) {
+    throw new Error("NOAA weather service unavailable.");
+  }
+
+  const [hourlyData, forecastData] = await Promise.all([
+    hourlyResponse.json(),
+    forecastResponse.json(),
+  ]);
+
+  const hourlyPeriods = hourlyData?.properties?.periods;
+  if (!Array.isArray(hourlyPeriods) || hourlyPeriods.length === 0) {
+    throw new Error("NOAA hourly data unavailable.");
+  }
+  const current = hourlyPeriods[0];
+  const nextHour = hourlyPeriods[1] || current;
+  const temp = convertTemperatureValue(current.temperature, current.temperatureUnit);
+  if (!Number.isFinite(temp)) {
+    throw new Error("NOAA temperature unavailable.");
+  }
+
+  const humidity = Number(current?.relativeHumidity?.value);
+  const currentCondition = current.shortForecast || "Unknown";
+  const nextCondition = nextHour.shortForecast || "Unknown";
+  const nextPrecip = nextHour?.probabilityOfPrecipitation?.value;
+  const currentPrecip = current?.probabilityOfPrecipitation?.value;
+
+  elements.temp.textContent = String(temp);
+  elements.condition.textContent = currentCondition;
+  elements.feels.textContent = "Feels like " + temp + " " + getTemperatureSymbol();
+  elements.humidity.textContent = Number.isFinite(humidity) ? Math.round(humidity) + "%" : "--";
+  elements.wind.textContent = formatNwsWind(current.windSpeed, current.windDirection);
+  elements.nextHour.textContent = formatForecastLabel(nextCondition, nextPrecip);
+  elements.precip.textContent = formatPrecipChance(currentPrecip);
+
+  const tomorrow = getTomorrowForecast(forecastData?.properties?.periods);
+  if (tomorrow) {
+    elements.tomorrow.textContent = `${tomorrow.maxTemp}/${tomorrow.minTemp} ${tomorrow.condition}`;
+  } else {
+    elements.tomorrow.textContent = "--";
+  }
+
+  await updateSunriseSunset(coords);
+}
+
 async function updateWeather() {
   try {
     await refreshWeatherSettings(false);
     const coords = await getCoordinates();
-    const weatherUrl = new URL("https://api.open-meteo.com/v1/forecast");
-    weatherUrl.searchParams.set("latitude", coords.latitude);
-    weatherUrl.searchParams.set("longitude", coords.longitude);
-    weatherUrl.searchParams.set(
-      "current",
-      "temperature_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,relative_humidity_2m"
-    );
-    weatherUrl.searchParams.set(
-      "hourly",
-      "temperature_2m,weather_code,precipitation_probability"
-    );
-    weatherUrl.searchParams.set(
-      "daily",
-      "temperature_2m_max,temperature_2m_min,weather_code,sunrise,sunset,precipitation_sum"
-    );
-    weatherUrl.searchParams.set("temperature_unit", weatherConfig.unit);
-    weatherUrl.searchParams.set("wind_speed_unit", getWindApiUnit());
-    weatherUrl.searchParams.set("timezone", "auto");
 
-    const response = await fetch(weatherUrl);
-    if (!response.ok) {
-      throw new Error("Unable to reach weather service.");
-    }
-
-    const data = await response.json();
-    const current = data.current;
-    if (!current) {
-      throw new Error("Weather data unavailable.");
-    }
-
-    const temp = Math.round(current.temperature_2m);
-    const feels = Math.round(current.apparent_temperature);
-    const humidity = Math.round(current.relative_humidity_2m);
-    const wind = Math.round(current.wind_speed_10m);
-    const windDir = windDirection(current.wind_direction_10m ?? 0);
-    const condition = WEATHER_CODES[current.weather_code] || "Weather code " + current.weather_code;
-
-    const tempSymbol = getTemperatureSymbol();
-    const windUnit = getWindDisplayUnit();
-
-    elements.temp.textContent = temp;
-    elements.condition.textContent = condition;
-    elements.feels.textContent = "Feels like " + feels + " " + tempSymbol;
-    elements.humidity.textContent = humidity + "%";
-    elements.wind.textContent = wind + " " + windUnit + " " + windDir;
-
-    const hourly = data.hourly;
-    if (hourly && Array.isArray(hourly.time)) {
-      const now = new Date();
-      const nextIndex = hourly.time.findIndex((time) => new Date(time) >= now);
-      const baseIndex = nextIndex === -1 ? hourly.time.length - 1 : nextIndex;
-      const nextHourCode = hourly.weather_code?.[baseIndex];
-      const nextHourPrecip = hourly.precipitation_probability?.[baseIndex];
-      const nextHourCondition = WEATHER_CODES[nextHourCode] || "Unknown";
-
-      elements.nextHour.textContent = formatForecastLabel(nextHourCondition, nextHourPrecip);
-    }
-
-    const daily = data.daily;
-    if (daily && Array.isArray(daily.time) && daily.time.length > 1) {
-      const todayIndex = 0;
-      const precip = daily.precipitation_sum?.[todayIndex];
-      if (precip !== undefined && precip !== null) {
-        if (weatherConfig.unit === "celsius") {
-          elements.precip.textContent = precip.toFixed(1) + " mm";
-        } else {
-          const inches = mmToInches(precip);
-          elements.precip.textContent = inches.toFixed(2) + " in";
-        }
-      }
-      const sunrise = daily.sunrise?.[todayIndex];
-      const sunset = daily.sunset?.[todayIndex];
-      if (sunrise && sunset) {
-        elements.sunrise.textContent = formatShortTime(new Date(sunrise));
-        elements.sunset.textContent = formatShortTime(new Date(sunset));
-      }
-
-      const tomorrowIndex = 1;
-      const maxTemp = Math.round(daily.temperature_2m_max?.[tomorrowIndex]);
-      const minTemp = Math.round(daily.temperature_2m_min?.[tomorrowIndex]);
-      const code = daily.weather_code?.[tomorrowIndex];
-      const tomorrowCondition = WEATHER_CODES[code] || "Unknown";
-      elements.tomorrow.textContent = maxTemp + "/" + minTemp + " " + tomorrowCondition;
+    try {
+      await updateWeatherFromOpenMeteo(coords);
+    } catch (openMeteoError) {
+      console.warn("Open-Meteo failed. Falling back to NOAA weather.gov.", openMeteoError);
+      await updateWeatherFromNws(coords);
     }
 
     elements.clock.textContent = formatTime(new Date());

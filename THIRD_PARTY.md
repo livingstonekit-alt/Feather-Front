@@ -16,12 +16,20 @@ Review each project for license details and attribution requirements.
 ## Weather and geocoding
 
 - Open-Meteo Forecast API
-  - Purpose: real-time weather data
+  - Purpose: primary real-time weather data
   - Reference: https://open-meteo.com/
 
 - Open-Meteo Geocoding API
   - Purpose: location/ZIP resolution to coordinates
   - Reference: https://open-meteo.com/en/docs/geocoding-api
+
+- NOAA weather.gov API
+  - Purpose: fallback weather forecast data (hourly + daily periods)
+  - Reference: https://www.weather.gov/documentation/services-web-api
+
+- Sunrise-Sunset API
+  - Purpose: sunrise/sunset times when using NOAA fallback
+  - Reference: https://sunrise-sunset.org/api
 
 ## Typography
 
