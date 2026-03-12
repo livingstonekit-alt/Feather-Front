@@ -3,6 +3,7 @@ const SETTINGS_REFRESH_MS = 60 * 1000;
 const DEFAULT_WEATHER_LOCATION = "YOUR_ZIP";
 const DEFAULT_WEATHER_UNIT = "fahrenheit";
 const SETTINGS_URL_PARAM = new URLSearchParams(window.location.search).get("settings_url");
+const SIMULATE_ALERT_PARAM = new URLSearchParams(window.location.search).get("simulate_alert");
 const HOST_BASE_URL = window.location.hostname
   ? `${window.location.protocol}//${window.location.hostname}:8002/api/weather/settings`
   : "";
@@ -11,8 +12,11 @@ const WEATHER_SETTINGS_URLS = SETTINGS_URL_PARAM
   : ["/api/weather/settings", HOST_BASE_URL, "http://localhost:8002/api/weather/settings"].filter(Boolean);
 
 const elements = {
+  overlay: document.getElementById("overlay"),
   location: document.getElementById("location"),
   locationTag: document.getElementById("location-tag"),
+  alertBanner: document.getElementById("alert-banner"),
+  alertText: document.getElementById("alert-text"),
   clock: document.getElementById("clock"),
   date: document.getElementById("date"),
   sunrise: document.getElementById("sunrise"),
@@ -61,6 +65,8 @@ const WEATHER_CODES = {
 
 let cachedCoords = null;
 let lastSettingsFetch = 0;
+let lastAlertId = "";
+let isAlertSimulationActive = false;
 let weatherConfig = {
   location: DEFAULT_WEATHER_LOCATION,
   unit: DEFAULT_WEATHER_UNIT,
@@ -207,6 +213,100 @@ function formatForecastLabel(condition, precipitation) {
     ? ""
     : " " + Math.round(precipitation) + "%";
   return condition + chance;
+}
+
+function clearAlertBanner() {
+  lastAlertId = "";
+  if (!elements.alertBanner || !elements.alertText) {
+    return;
+  }
+  if (elements.overlay) {
+    elements.overlay.dataset.alertActive = "false";
+  }
+  elements.alertBanner.dataset.active = "false";
+  elements.alertBanner.setAttribute("aria-hidden", "true");
+  elements.alertText.textContent = "";
+}
+
+function setAlertBanner(text, alertId) {
+  if (!elements.alertBanner || !elements.alertText) {
+    return;
+  }
+  lastAlertId = alertId || "";
+  if (elements.overlay) {
+    elements.overlay.dataset.alertActive = "true";
+  }
+  elements.alertText.textContent = text;
+  const durationSeconds = Math.max(24, Math.ceil(text.length / 7));
+  elements.alertText.style.animationDuration = `${durationSeconds}s`;
+  elements.alertBanner.dataset.active = "true";
+  elements.alertBanner.setAttribute("aria-hidden", "false");
+}
+
+function runSimulatedAlert(durationMs = 10000) {
+  if (!SIMULATE_ALERT_PARAM || isAlertSimulationActive) {
+    return false;
+  }
+  isAlertSimulationActive = true;
+  const expires = formatAlertTime(new Date(Date.now() + durationMs).toISOString());
+  const text = [
+    "Special Weather Statement",
+    `expires at ${expires}`,
+    "| This is a Feather Front alert simulation for layout testing. Strong thunderstorms may produce gusty winds, small hail, and dangerous travel conditions.",
+    "Instruction: Seek shelter and monitor NOAA updates.",
+  ].join(" ");
+  setAlertBanner(text, "simulated-alert");
+  window.setTimeout(() => {
+    isAlertSimulationActive = false;
+    clearAlertBanner();
+  }, durationMs);
+  return true;
+}
+
+function getAlertSeverityRank(severity) {
+  const value = String(severity || "").toLowerCase();
+  if (value === "extreme") {
+    return 4;
+  }
+  if (value === "severe") {
+    return 3;
+  }
+  if (value === "moderate") {
+    return 2;
+  }
+  if (value === "minor") {
+    return 1;
+  }
+  return 0;
+}
+
+function formatAlertTime(value) {
+  if (!value) {
+    return "";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+function buildAlertText(properties) {
+  const event = String(properties.event || "Weather Advisory").trim();
+  const expires = formatAlertTime(properties.expires || properties.ends);
+  const description = String(properties.description || "").replace(/\s+/g, " ").trim();
+  const instruction = String(properties.instruction || "").replace(/\s+/g, " ").trim();
+  const parts = [event];
+  if (expires) {
+    parts.push(`expires at ${expires}`);
+  }
+  if (description) {
+    parts.push(`| ${description}`);
+  }
+  if (instruction) {
+    parts.push(`Instruction: ${instruction}`);
+  }
+  return parts.join(" ");
 }
 
 function toLocalDateKey(date) {
@@ -493,6 +593,55 @@ async function updateSunriseSunset(coords) {
   elements.sunset.textContent = "--";
 }
 
+async function updateNoaaAlerts(coords) {
+  const latitude = Number(coords.latitude);
+  const longitude = Number(coords.longitude);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    clearAlertBanner();
+    return;
+  }
+
+  const alertsUrl = new URL("https://api.weather.gov/alerts/active");
+  alertsUrl.searchParams.set("point", `${latitude.toFixed(4)},${longitude.toFixed(4)}`);
+  const response = await fetch(alertsUrl);
+  if (!response.ok) {
+    throw new Error("NOAA alerts unavailable.");
+  }
+  const data = await response.json();
+  const features = Array.isArray(data.features) ? data.features : [];
+  if (features.length === 0) {
+    clearAlertBanner();
+    return;
+  }
+
+  const currentAlerts = features
+    .map((feature) => feature && feature.properties ? feature.properties : null)
+    .filter(Boolean)
+    .filter((properties) => String(properties.status || "").toLowerCase() === "actual");
+
+  if (currentAlerts.length === 0) {
+    clearAlertBanner();
+    return;
+  }
+
+  currentAlerts.sort((left, right) => {
+    const severityDelta = getAlertSeverityRank(right.severity) - getAlertSeverityRank(left.severity);
+    if (severityDelta !== 0) {
+      return severityDelta;
+    }
+    const leftSent = new Date(left.sent || left.effective || 0).getTime();
+    const rightSent = new Date(right.sent || right.effective || 0).getTime();
+    return rightSent - leftSent;
+  });
+
+  const topAlert = currentAlerts[0];
+  const nextAlertId = String(topAlert.id || topAlert["@id"] || buildAlertText(topAlert));
+  const nextText = buildAlertText(topAlert);
+  if (nextAlertId !== lastAlertId || elements.alertText.textContent !== nextText) {
+    setAlertBanner(nextText, nextAlertId);
+  }
+}
+
 async function updateWeatherFromNws(coords) {
   const latitude = Number(coords.latitude);
   const longitude = Number(coords.longitude);
@@ -564,6 +713,15 @@ async function updateWeather() {
   try {
     await refreshWeatherSettings(false);
     const coords = await getCoordinates();
+    if (runSimulatedAlert()) {
+      elements.clock.textContent = formatTime(new Date());
+      elements.date.textContent = formatDate(new Date());
+      return;
+    }
+    const alertPromise = updateNoaaAlerts(coords).catch((error) => {
+      console.warn("NOAA alerts lookup failed.", error);
+      clearAlertBanner();
+    });
 
     try {
       await updateWeatherFromOpenMeteo(coords);
@@ -572,9 +730,12 @@ async function updateWeather() {
       await updateWeatherFromNws(coords);
     }
 
+    await alertPromise;
+
     elements.clock.textContent = formatTime(new Date());
     elements.date.textContent = formatDate(new Date());
   } catch (error) {
+    clearAlertBanner();
     elements.condition.textContent = "Weather refresh failed";
     elements.feels.textContent = error.message;
   }
