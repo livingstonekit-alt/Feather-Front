@@ -346,9 +346,11 @@ button.count {
 }
 
 .toggle {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 10px;
+  width: 100%;
+  min-height: 22px;
   font-size: 0.85rem;
   color: var(--ink);
   cursor: pointer;
@@ -361,6 +363,7 @@ button.count {
 }
 
 .toggle-ui {
+  flex: 0 0 40px;
   width: 40px;
   height: 22px;
   border-radius: 999px;

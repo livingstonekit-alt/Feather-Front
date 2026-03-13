@@ -29,6 +29,10 @@ const elements = {
   logoutSettings: document.getElementById("logout-settings"),
   weatherLocation: document.getElementById("weather-location"),
   weatherUnit: document.getElementById("weather-unit"),
+  discordDailySummaryEnabled: document.getElementById("discord-daily-summary-enabled"),
+  discordWebhookUrl: document.getElementById("discord-webhook-url"),
+  discordWebhookStatus: document.getElementById("discord-webhook-status"),
+  discordClearWebhook: document.getElementById("discord-clear-webhook"),
   saveSettings: document.getElementById("save-settings"),
   restartCapture: document.getElementById("restart-capture"),
   saveStatus: document.getElementById("save-status"),
@@ -469,7 +473,6 @@ async function loadSettings() {
       const configuredUnit = String(data.weather_unit || "fahrenheit").toLowerCase();
       elements.weatherUnit.value = configuredUnit === "celsius" ? "celsius" : "fahrenheit";
     }
-
     currentDevice = data.input_device || "";
     elements.deviceManual.value = "";
 
@@ -497,6 +500,36 @@ async function loadSettings() {
     setStatus("Loaded");
   } catch (error) {
     setStatus("Failed to load");
+  }
+}
+
+async function loadDiscordSettings() {
+  if (!elements.discordWebhookStatus) {
+    return;
+  }
+  try {
+    const response = await fetch("/api/discord/settings", { cache: "no-store" });
+    const data = await response.json();
+    if (elements.discordDailySummaryEnabled) {
+      elements.discordDailySummaryEnabled.checked = Boolean(data.discord_daily_summary_enabled);
+    }
+    elements.discordWebhookStatus.textContent = data.has_webhook
+      ? "Webhook saved"
+      : "No webhook saved";
+    if (elements.discordWebhookUrl) {
+      elements.discordWebhookUrl.value = "";
+    }
+    if (elements.discordClearWebhook) {
+      elements.discordClearWebhook.checked = false;
+    }
+  } catch (error) {
+    elements.discordWebhookStatus.textContent = "Discord settings unavailable";
+  }
+}
+
+function setDiscordToggleState(enabled) {
+  if (elements.discordDailySummaryEnabled) {
+    elements.discordDailySummaryEnabled.checked = Boolean(enabled);
   }
 }
 
@@ -1225,6 +1258,10 @@ async function saveSettings() {
     ? String(elements.weatherUnit.value || "fahrenheit").toLowerCase()
     : "fahrenheit";
   const httpPortValue = normalizePort(elements.httpPort ? elements.httpPort.value : currentHttpPort);
+  const discordWebhookValue = elements.discordWebhookUrl
+    ? elements.discordWebhookUrl.value.trim()
+    : "";
+  const discordClearWebhook = Boolean(elements.discordClearWebhook && elements.discordClearWebhook.checked);
 
   const payload = {
     http_port: httpPortValue,
@@ -1254,10 +1291,30 @@ async function saveSettings() {
     });
     const result = await response.json();
     if (result.ok) {
+      const discordResponse = await fetch("/api/discord/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          discord_daily_summary_enabled: Boolean(
+            elements.discordDailySummaryEnabled && elements.discordDailySummaryEnabled.checked
+          ),
+          discord_webhook_url: discordWebhookValue,
+          clear_discord_webhook: discordClearWebhook,
+        }),
+      });
+      const discordResult = await discordResponse.json();
+      if (!discordResult.ok) {
+        setStatus(discordResult.error || "Discord settings save failed");
+        return;
+      }
+      setDiscordToggleState(
+        Boolean(elements.discordDailySummaryEnabled && elements.discordDailySummaryEnabled.checked)
+      );
       persistPanelPreferences();
       if (Array.isArray(result.changed) && result.changed.includes("http_port")) {
         setStatus("Saved. Restart server to apply the new port.");
         renderOverlayUrls();
+        loadDiscordSettings();
         return;
       }
       const verification = await verifyWeatherSettings(
@@ -1269,6 +1326,7 @@ async function saveSettings() {
       } else {
         setStatus("Saved, but weather settings were not applied by server (restart required)");
       }
+      loadDiscordSettings();
     } else {
       setStatus("Save failed");
     }
@@ -1507,7 +1565,10 @@ window.addEventListener("focus", () => {
 applyPanelPreferences();
 bindEvents();
 renderOverlayUrls();
-loadInputs().then(loadSettings);
+loadInputs().then(async () => {
+  await loadSettings();
+  await loadDiscordSettings();
+});
 updateSortIndicators();
 updateMissingIconFilterButton();
 updateActivityFilterButtons();

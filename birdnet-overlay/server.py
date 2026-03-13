@@ -21,6 +21,9 @@ import sys
 import threading
 import time
 import uuid
+import urllib.error
+import urllib.request
+import mimetypes
 from copy import deepcopy
 from datetime import datetime, timezone, timedelta
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -41,6 +44,8 @@ CLIPS_DIR = DATA_DIR / "clips"
 CLIP_INDEX_PATH = DATA_DIR / "clips.json"
 ICONS_DIR = DATA_DIR / "icons"
 ICON_INDEX_PATH = DATA_DIR / "icons.json"
+DISCORD_STATE_PATH = DATA_DIR / "discord_state.json"
+DAILY_BEST_DIR = DATA_DIR / "daily_best"
 ANALYSIS_MIN_CONF = 0.01
 MAX_QUEUE_SEGMENTS = 60
 GATE_WORKERS = 1
@@ -72,6 +77,8 @@ DEFAULT_CONFIG = {
   "auto_week": False,
   "weather_location": "YOUR_ZIP",
   "weather_unit": "fahrenheit",
+  "discord_daily_summary_enabled": False,
+  "discord_webhook_url": "",
   "settings_auth_enabled": False,
   "settings_auth_user": "admin",
   "settings_auth_password_hash": "",
@@ -94,6 +101,9 @@ species_count_lock = threading.Lock()
 species_counts = {}
 capture_pid_lock = threading.Lock()
 current_capture_pid = None
+discord_state_lock = threading.Lock()
+sunset_cache_lock = threading.Lock()
+sunset_cache = {}
 
 
 def restart_server_process():
@@ -478,6 +488,8 @@ def load_config():
   env_override("auto_week", "AUTO_WEEK", lambda value: value.lower() in {"1", "true", "yes", "on"})
   env_override("weather_location", "WEATHER_LOCATION", str)
   env_override("weather_unit", "WEATHER_UNIT", normalize_weather_unit)
+  env_override("discord_daily_summary_enabled", "DISCORD_DAILY_SUMMARY_ENABLED", normalize_bool)
+  env_override("discord_webhook_url", "DISCORD_WEBHOOK_URL", str)
   env_override("settings_auth_enabled", "SETTINGS_AUTH_ENABLED", normalize_bool)
   env_override("settings_auth_user", "SETTINGS_AUTH_USER", str)
   env_override("settings_auth_password_hash", "SETTINGS_AUTH_PASSWORD_HASH", str)
@@ -489,6 +501,8 @@ def load_config():
 
   config["weather_unit"] = normalize_weather_unit(config.get("weather_unit"))
   config["weather_location"] = str(config.get("weather_location") or "YOUR_ZIP")
+  config["discord_daily_summary_enabled"] = normalize_bool(config.get("discord_daily_summary_enabled"))
+  config["discord_webhook_url"] = str(config.get("discord_webhook_url") or "").strip()
   config["settings_auth_enabled"] = normalize_bool(config.get("settings_auth_enabled"))
   config["settings_auth_user"] = str(config.get("settings_auth_user") or "admin").strip() or "admin"
   config["settings_auth_password_hash"] = str(config.get("settings_auth_password_hash") or "").strip()
@@ -504,6 +518,7 @@ def get_config_snapshot(config):
   with config_lock:
     snapshot = dict(config)
   snapshot.pop("settings_auth_password_hash", None)
+  snapshot.pop("discord_webhook_url", None)
   snapshot["current_week"] = current_week()
   return snapshot
 
@@ -555,6 +570,7 @@ def update_config(config, updates):
       "birdnet_workdir",
       "location",
       "weather_location",
+      "discord_webhook_url",
     }:
       return str(value)
     if key == "auto_week":
@@ -791,6 +807,374 @@ def set_cached_summary(payload):
       connection.commit()
   except sqlite3.Error:
     return
+
+
+def load_json_file(path, default=None):
+  if default is None:
+    default = {}
+  try:
+    if not path.exists():
+      return deepcopy(default)
+    data = json.loads(path.read_text(encoding="utf-8"))
+  except (OSError, json.JSONDecodeError):
+    return deepcopy(default)
+  return data if isinstance(data, type(default)) else deepcopy(default)
+
+
+def save_json_file(path, payload):
+  try:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=True, indent=2), encoding="utf-8")
+    return True
+  except OSError:
+    return False
+
+
+def get_local_timezone():
+  return datetime.now().astimezone().tzinfo
+
+
+def local_day_bounds(target_date=None):
+  tzinfo = get_local_timezone()
+  now_local = datetime.now(tzinfo)
+  if target_date is None:
+    target_date = now_local.date()
+  start_local = datetime.combine(target_date, datetime.min.time(), tzinfo=tzinfo)
+  end_local = start_local + timedelta(days=1)
+  return start_local, end_local
+
+
+def iso_utc(value):
+  return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def http_json(url, timeout=20):
+  request = urllib.request.Request(
+    str(url),
+    headers={
+      "Accept": "application/json",
+      "User-Agent": "Feather-Front/1.0",
+    },
+  )
+  with urllib.request.urlopen(request, timeout=timeout) as response:
+    return json.loads(response.read().decode("utf-8"))
+
+
+def geocode_weather_location(config):
+  location = str(config.get("weather_location") or "").strip()
+  lat = config.get("latitude")
+  lon = config.get("longitude")
+  try:
+    lat_value = float(lat)
+    lon_value = float(lon)
+  except (TypeError, ValueError):
+    lat_value = -1
+    lon_value = -1
+  if lat_value != -1 and lon_value != -1:
+    return {"latitude": lat_value, "longitude": lon_value, "label": str(config.get("location") or location or "Stream")}
+  if not location:
+    return None
+  geo_url = "https://geocoding-api.open-meteo.com/v1/search?" + urlencode({
+    "name": location,
+    "count": "1",
+    "language": "en",
+    "format": "json",
+  })
+  data = http_json(geo_url)
+  results = data.get("results") or []
+  if not results:
+    return None
+  top = results[0]
+  bits = [top.get("name"), top.get("admin1"), top.get("country_code")]
+  label = ", ".join([str(bit).strip() for bit in bits if str(bit or "").strip()])
+  return {
+    "latitude": float(top["latitude"]),
+    "longitude": float(top["longitude"]),
+    "label": label or location,
+  }
+
+
+def get_sunset_time(config, target_date=None):
+  tzinfo = get_local_timezone()
+  if target_date is None:
+    target_date = datetime.now(tzinfo).date()
+  cache_key = target_date.isoformat()
+  with sunset_cache_lock:
+    cached = sunset_cache.get(cache_key)
+  if cached:
+    return cached
+  location_info = geocode_weather_location(config)
+  if not location_info:
+    return None
+  sunrise_url = "https://api.sunrise-sunset.org/json?" + urlencode({
+    "lat": f"{location_info['latitude']:.6f}",
+    "lng": f"{location_info['longitude']:.6f}",
+    "formatted": "0",
+    "date": target_date.isoformat(),
+  })
+  data = http_json(sunrise_url)
+  results = data.get("results") or {}
+  sunset_raw = results.get("sunset")
+  if not sunset_raw:
+    return None
+  sunset_value = datetime.fromisoformat(str(sunset_raw).replace("Z", "+00:00")).astimezone(tzinfo)
+  with sunset_cache_lock:
+    sunset_cache[cache_key] = sunset_value
+  return sunset_value
+
+
+def load_discord_state():
+  with discord_state_lock:
+    return load_json_file(DISCORD_STATE_PATH, default={})
+
+
+def save_discord_state(state):
+  with discord_state_lock:
+    return save_json_file(DISCORD_STATE_PATH, state or {})
+
+
+def get_daily_summary_rows(target_date=None, end_time=None):
+  start_local, end_local = local_day_bounds(target_date)
+  if end_time is not None:
+    end_local = min(end_local, end_time.astimezone(start_local.tzinfo))
+  start_iso = iso_utc(start_local)
+  end_iso = iso_utc(end_local)
+  try:
+    with db_connect() as connection:
+      rows = connection.execute(
+        """
+        SELECT species, COUNT(1) AS heard_count
+        FROM detections
+        WHERE timestamp >= ? AND timestamp < ?
+        GROUP BY species
+        ORDER BY heard_count DESC, species ASC
+        """,
+        (start_iso, end_iso),
+      ).fetchall()
+  except sqlite3.Error:
+    return []
+  return [{"species": str(row["species"] or "Unknown"), "count": int(row["heard_count"] or 0)} for row in rows]
+
+
+def get_daily_best_metadata(target_date=None):
+  state = load_json_file(DAILY_BEST_DIR / "index.json", default={})
+  if target_date is None:
+    target_date = datetime.now(get_local_timezone()).date()
+  data = state.get(target_date.isoformat())
+  return data if isinstance(data, dict) else None
+
+
+def set_daily_best_metadata(target_date, payload):
+  path = DAILY_BEST_DIR / "index.json"
+  state = load_json_file(path, default={})
+  state[target_date.isoformat()] = payload
+  save_json_file(path, state)
+
+
+def build_discord_multipart(payload, files):
+  boundary = "----FeatherFront" + uuid.uuid4().hex
+  parts = []
+
+  def add_field(name, value, filename=None, content_type=None):
+    header = [f"--{boundary}"]
+    disposition = f'Content-Disposition: form-data; name="{name}"'
+    if filename is not None:
+      disposition += f'; filename="{filename}"'
+    header.append(disposition)
+    if content_type:
+      header.append(f"Content-Type: {content_type}")
+    header.append("")
+    parts.append("\r\n".join(header).encode("utf-8"))
+    parts.append(value if isinstance(value, bytes) else str(value).encode("utf-8"))
+
+  add_field("payload_json", json.dumps(payload, ensure_ascii=True), content_type="application/json")
+  for index, file_info in enumerate(files):
+    add_field(
+      f"files[{index}]",
+      file_info["data"],
+      filename=file_info["filename"],
+      content_type=file_info.get("content_type") or "application/octet-stream",
+    )
+  parts.append(f"--{boundary}--".encode("utf-8"))
+  body = b"\r\n".join(parts) + b"\r\n"
+  return body, boundary
+
+
+def post_discord_webhook(webhook_url, payload, files):
+  body, boundary = build_discord_multipart(payload, files)
+  request = urllib.request.Request(
+    webhook_url,
+    data=body,
+    headers={
+      "Content-Type": f"multipart/form-data; boundary={boundary}",
+      "User-Agent": "Feather-Front/1.0",
+    },
+    method="POST",
+  )
+  with urllib.request.urlopen(request, timeout=30) as response:
+    return response.status
+
+
+def build_daily_summary_text(rows, target_date):
+  header = f"Daily bird summary for {target_date.strftime('%b %d, %Y')}"
+  lines = [header]
+  for row in rows:
+    lines.append(f"{row['species']}: {row['count']}")
+  return "\n".join(lines)
+
+
+def get_discord_settings_snapshot(config):
+  with config_lock:
+    enabled = bool(config.get("discord_daily_summary_enabled"))
+    has_webhook = bool(str(config.get("discord_webhook_url") or "").strip())
+  return {
+    "discord_daily_summary_enabled": enabled,
+    "has_webhook": has_webhook,
+  }
+
+
+def update_discord_settings(config, updates):
+  changed = set()
+  with config_lock:
+    if "discord_daily_summary_enabled" in updates:
+      value = updates.get("discord_daily_summary_enabled")
+      enabled = value.strip().lower() in {"1", "true", "yes", "on"} if isinstance(value, str) else bool(value)
+      if config.get("discord_daily_summary_enabled") != enabled:
+        config["discord_daily_summary_enabled"] = enabled
+        changed.add("discord_daily_summary_enabled")
+
+    if updates.get("clear_discord_webhook"):
+      if str(config.get("discord_webhook_url") or "").strip():
+        config["discord_webhook_url"] = ""
+        changed.add("discord_webhook_url")
+    else:
+      webhook_value = str(updates.get("discord_webhook_url") or "").strip()
+      if webhook_value:
+        if config.get("discord_webhook_url") != webhook_value:
+          config["discord_webhook_url"] = webhook_value
+          changed.add("discord_webhook_url")
+
+    if changed:
+      write_config(config)
+  return changed
+
+
+def build_best_recording_embed(best_metadata):
+  if not best_metadata:
+    return None
+  timestamp = parse_timestamp(best_metadata.get("timestamp"))
+  recorded_local = timestamp.astimezone(get_local_timezone()) if timestamp else None
+  recorded_text = recorded_local.strftime("%-I:%M %p") if recorded_local else ""
+  confidence_label = format_confidence(best_metadata.get("confidence")) or "--"
+  embed = {
+    "title": f"Best recording of the day: {best_metadata.get('species', 'Unknown')}",
+    "description": f"Confidence: {confidence_label}\nRecorded: {recorded_text}" if recorded_text else f"Confidence: {confidence_label}",
+    "color": 0xFF8A4C,
+  }
+  if best_metadata.get("filename"):
+    embed["fields"] = [{
+      "name": "Audio clip",
+      "value": f"`{best_metadata['filename']}`",
+      "inline": False,
+    }]
+  return embed
+
+
+def load_attachment(path):
+  try:
+    data = Path(path).read_bytes()
+  except OSError:
+    return None
+  content_type = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
+  return {
+    "filename": Path(path).name,
+    "data": data,
+    "content_type": content_type,
+  }
+
+
+def send_daily_discord_summary(config, target_date=None, end_time=None):
+  webhook_url = str(config.get("discord_webhook_url") or "").strip()
+  if not webhook_url:
+    return False, "Discord webhook URL missing"
+  if target_date is None:
+    target_date = datetime.now(get_local_timezone()).date()
+  rows = get_daily_summary_rows(target_date=target_date, end_time=end_time)
+  if not rows:
+    return False, "No detections for summary window"
+
+  summary_text = build_daily_summary_text(rows, target_date)
+  files = []
+  content = summary_text
+  if len(content) > 1900:
+    summary_filename = f"daily-summary-{target_date.isoformat()}.txt"
+    files.append({
+      "filename": summary_filename,
+      "data": summary_text.encode("utf-8"),
+      "content_type": "text/plain",
+    })
+    content = f"Daily bird summary for {target_date.strftime('%b %d, %Y')} attached."
+
+  best_metadata = get_daily_best_metadata(target_date)
+  embeds = []
+  if best_metadata:
+    embed = build_best_recording_embed(best_metadata)
+    if embed:
+      icon_path = ICONS_DIR / f"{slugify(best_metadata.get('species', 'Unknown'))}.png"
+      icon_file = load_attachment(icon_path) if icon_path.exists() else None
+      if icon_file:
+        embed["thumbnail"] = {"url": f"attachment://{icon_file['filename']}"}
+        files.append(icon_file)
+      clip_path = DAILY_BEST_DIR / str(best_metadata.get("filename") or "")
+      clip_file = load_attachment(clip_path) if clip_path.exists() else None
+      if clip_file:
+        files.append(clip_file)
+      embeds.append(embed)
+
+  payload = {
+    "content": content,
+    "allowed_mentions": {"parse": []},
+  }
+  if embeds:
+    payload["embeds"] = embeds
+
+  post_discord_webhook(webhook_url, payload, files)
+  return True, ""
+
+
+def discord_summary_loop(config, stop_event):
+  while not stop_event.is_set():
+    try:
+      snapshot = get_config_snapshot(config)
+      enabled = bool(snapshot.get("discord_daily_summary_enabled"))
+      if not enabled:
+        stop_event.wait(30)
+        continue
+
+      with config_lock:
+        webhook_url = str(config.get("discord_webhook_url") or "").strip()
+      if not webhook_url:
+        stop_event.wait(30)
+        continue
+
+      now_local = datetime.now(get_local_timezone())
+      today = now_local.date()
+      state = load_discord_state()
+      last_sent = str(state.get("last_daily_summary_date") or "").strip()
+      sunset_time = get_sunset_time(config, today)
+      if sunset_time and now_local >= sunset_time and last_sent != today.isoformat():
+        ok, message = send_daily_discord_summary(config, target_date=today, end_time=now_local)
+        if ok:
+          state["last_daily_summary_date"] = today.isoformat()
+          state["last_daily_summary_sent_at"] = now_iso()
+          save_discord_state(state)
+          log_event("discord", f"Posted daily Discord summary for {today.isoformat()}")
+        elif message:
+          log_event("discord", f"Skipped daily Discord summary: {message}")
+      stop_event.wait(30)
+    except Exception as error:
+      log_event("error", f"Discord summary loop error: {error}")
+      stop_event.wait(30)
 
 
 def derive_last_detection(entries, config):
@@ -1313,6 +1697,54 @@ def update_best_clips(segment_path, predictions):
     updated = True
   if updated:
     save_clip_index(index)
+
+
+def update_daily_best_clip(segment_path, predictions):
+  if not predictions:
+    return
+  DAILY_BEST_DIR.mkdir(parents=True, exist_ok=True)
+  local_now = datetime.now(get_local_timezone())
+  day_key = local_now.date()
+  current = get_daily_best_metadata(day_key) or {}
+  try:
+    current_score = float(current.get("score"))
+  except (TypeError, ValueError):
+    current_score = -1.0
+
+  best_prediction = None
+  best_score = current_score
+  best_snr = None
+  snr_db = compute_snr_db(segment_path)
+  for prediction in predictions:
+    confidence = normalize_confidence(prediction.get("confidence"))
+    confidence_value = confidence if confidence is not None else -1.0
+    score = compute_clip_score(confidence_value, snr_db)
+    if score <= best_score:
+      continue
+    best_prediction = prediction
+    best_score = score
+    best_snr = snr_db
+
+  if not best_prediction:
+    return
+
+  filename = f"{day_key.isoformat()}-best.wav"
+  target = DAILY_BEST_DIR / filename
+  try:
+    shutil.copy2(segment_path, target)
+  except OSError:
+    return
+
+  payload = {
+    "species": best_prediction.get("species", "Unknown") or "Unknown",
+    "scientific_name": best_prediction.get("scientific_name", ""),
+    "confidence": best_prediction.get("confidence"),
+    "score": round(best_score, 2),
+    "snr_db": best_snr,
+    "timestamp": now_iso(),
+    "filename": filename,
+  }
+  set_daily_best_metadata(day_key, payload)
 
 
 def summarize_log():
@@ -1999,6 +2431,7 @@ def analyze_segment(path, config):
     if above:
       record_last_detection(above, snapshot)
       update_best_clips(path, above)
+      update_daily_best_clip(path, above)
     else:
       threshold_label = format_confidence(report_threshold)
       if threshold_label:
@@ -2477,6 +2910,8 @@ def make_handler(config):
         return self._send_json(200, payload)
       if path.startswith("/api/settings"):
         return self._send_json(200, get_config_snapshot(config))
+      if path.startswith("/api/discord/settings"):
+        return self._send_json(200, get_discord_settings_snapshot(config))
       if path.startswith("/api/weather/settings"):
         snapshot = get_config_snapshot(config)
         payload = {
@@ -2584,6 +3019,12 @@ def make_handler(config):
           return self._send_json(400, {"ok": False, "error": "Invalid JSON"})
         changed = update_config(config, data)
         return self._send_json(200, {"ok": True, "changed": sorted(changed)})
+      if path.startswith("/api/discord/settings"):
+        data = self._read_json()
+        if data is None or not isinstance(data, dict):
+          return self._send_json(400, {"ok": False, "error": "Invalid JSON"})
+        changed = update_discord_settings(config, data)
+        return self._send_json(200, {"ok": True, "changed": sorted(changed)})
       if path.startswith("/api/restart/server"):
         log_event("server", "Server restart requested")
         self._send_json(200, {"ok": True})
@@ -2638,9 +3079,11 @@ def main():
   stop_event = threading.Event()
   capture_thread = threading.Thread(target=capture_loop, args=(config, stop_event), daemon=True)
   process_thread = threading.Thread(target=process_loop, args=(config, stop_event), daemon=True)
+  discord_thread = threading.Thread(target=discord_summary_loop, args=(config, stop_event), daemon=True)
 
   capture_thread.start()
   process_thread.start()
+  discord_thread.start()
 
   run_server(config, stop_event)
 

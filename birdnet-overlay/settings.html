@@ -291,6 +291,43 @@
               </div>
             </div>
           </details>
+
+          <details class="block block-collapsible" data-panel="discord" open>
+            <summary class="block-summary">
+              <div class="block-header">
+                <h3>Discord</h3>
+                <span class="block-subtitle">Daily sunset summary webhook</span>
+              </div>
+              <div class="panel-controls">
+                <button class="drag-handle" type="button" aria-label="Drag to reorder" draggable="true">↕</button>
+                <span class="collapse-icon" aria-hidden="true"></span>
+              </div>
+            </summary>
+            <div class="block-body">
+              <div class="field toggle-field">
+                <label class="toggle">
+                  <input id="discord-daily-summary-enabled" type="checkbox">
+                  <span class="toggle-ui"></span>
+                  Post daily bird summary to Discord at sunset
+                </label>
+              </div>
+              <div class="field">
+                <label for="discord-webhook-url">
+                  Discord webhook URL
+                  <span class="help" data-tip="Write-only. Leave blank to keep the current saved webhook." tabindex="0">i</span>
+                </label>
+                <input id="discord-webhook-url" type="password" placeholder="https://discord.com/api/webhooks/..." autocomplete="off" title="Discord webhook URL. Leave blank to keep the current saved webhook.">
+                <p class="hint" id="discord-webhook-status">No webhook saved</p>
+              </div>
+              <div class="field toggle-field">
+                <label class="toggle">
+                  <input id="discord-clear-webhook" type="checkbox">
+                  <span class="toggle-ui"></span>
+                  Clear saved webhook on next save
+                </label>
+              </div>
+            </div>
+          </details>
         </div>
       </section>
 
